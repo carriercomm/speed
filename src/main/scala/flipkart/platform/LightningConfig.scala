@@ -1,0 +1,18 @@
+package flipkart.platform
+
+/**
+ * Created by IntelliJ IDEA.
+ * User: vivekys
+ * Date: 03/08/12
+ * Time: 3:06 PM
+ * To change this template use File | Settings | File Templates.
+ */
+
+class LightningConfig (val metaStoreHost : String, //MetaStore host & in this case redis host
+                       val metaStorePort : Int, // MetaStore port & in this case redis port
+                       val dataStoreHost : Array[String], //DataStore hosts & in this case membase cluster hosts
+                       val dataStorePort : Int, //DataStore port & in this case membase cluster port
+                       val dataStoreBucket : String, //Membase bucket Name
+                       val dataChunkSize : Int,  val preFetchSize : Int) {
+
+}
