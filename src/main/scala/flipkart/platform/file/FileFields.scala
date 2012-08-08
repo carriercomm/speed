@@ -12,5 +12,6 @@ object FileFields extends Enumeration {
   val NAME = Value("Name")
   val SIZE = Value("Size")
   val STATUS = Value("Status")
+  val OPCNT = Value("OpCnt")
   val NUMCHUNKS = Value("NumChunks")
 }

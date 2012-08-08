@@ -1,8 +1,8 @@
 package flipkart.platform
 
 import file.{FileStatus, FileMetaData}
-import java.io.InputStream
 import store.{StoreManager, MembaseStore, RedisStore}
+import java.io.{IOException, InputStream}
 
 /**
  * Created by IntelliJ IDEA.
@@ -17,22 +17,28 @@ class Lightning (val config : LightningConfig) extends Speed {
   val storeManager = new StoreManager(config)
 
   def create(fileName: String, metaData: FileMetaData) = {
+    log.info("Request received to create File " + fileName + " with metadata " + metaData)
     storeManager.create(fileName, metaData)
   }
 
   def write(fileName: String, inputStream: InputStream) = {
+    log.info("Request received for writing to file " + fileName)
     storeManager.write(fileName, inputStream)
   }
 
   def read(fileName: String) = {
+    log.info("Request received for reading from file " + fileName)
     storeManager.read(fileName)
   }
 
   def delete(fileName: String) = {
+    log.info("Request received for deleting file " + fileName)
     storeManager.delete(fileName)
   }
 
   def ls() = {
-    storeManager.ls()
+    log.info("Request received for listing files")
+    val returnval = storeManager.ls()
+    returnval
   }
 }

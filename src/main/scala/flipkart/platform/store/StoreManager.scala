@@ -1,12 +1,12 @@
 package flipkart.platform.store
 
 import flipkart.platform.{Speed, LightningConfig}
-import java.io.InputStream
 import flipkart.platform.file.{FileStatus, FileMetaData}
 import java.nio.ByteBuffer
 import flipkart.platform.randomGenerator.RandomGenerator
-import actors.Actor
-import flipkart.platform.buffer.{SpeedBuf, UnBoundedFifoBuf}
+import java.io.{IOException, InputStream}
+import akka.actor.{Props, ActorSystem, Actor}
+import flipkart.platform.buffer.{SpeedBufStatus, SpeedBuf, UnBoundedFifoBuf}
 
 
 /**
@@ -17,26 +17,31 @@ import flipkart.platform.buffer.{SpeedBuf, UnBoundedFifoBuf}
  * To change this template use File | Settings | File Templates.
  */
 
-class StoreManager (config : LightningConfig) extends Speed{
+class StoreManager(config: LightningConfig) extends Speed
+{
   val metaStore = new RedisStore(config.metaStoreHost, config.metaStorePort)
 
   val dataStore = new MembaseStore(config.dataStoreHost, config.dataStoreBucket)
 
   val chunkSize = config.dataChunkSize
 
-  def create(fileName: String, metaData: FileMetaData) = {
+  def create(fileName: String, metaData: FileMetaData) =
+  {
     metaStore.createFile(fileName, metaData)
   }
 
-  def write(fileName: String, inputStream: InputStream) = {
-    if (metaStore.getFileStatus(fileName) == FileStatus.WRITING)
+  def write(fileName: String, inputStream: InputStream) =
+  {
+    if (metaStore.getFileStatus(fileName) == FileStatus.IDLE)
     {
+      metaStore.setFileStatus(fileName, FileStatus.WRITING, 1)
+
       val fileSize = metaStore.getFileSize(fileName)
-      val chunkCnt = fileSize/chunkSize +
-                        (if (fileSize % chunkSize == 0)
-                            0
-                         else
-                            1)
+      val chunkCnt = fileSize / chunkSize +
+        (if (fileSize % chunkSize == 0)
+          0
+        else
+          1)
       //Loop for 1 to chunkCnt - 1 which has full chunkSize &
       //for the last chunk the size will be fileSize - chunkSize * (chunkCnt - 1)
       val byteBuffer = ByteBuffer.allocate(chunkSize)
@@ -46,61 +51,98 @@ class StoreManager (config : LightningConfig) extends Speed{
         {
           var byte = inputStream.read()
           if (byte == -1)
-            println("Something got screwed")
+            log.error("Something got screwed")
           else
             byteBuffer.put(byte.toByte)
         }
         var key = RandomGenerator.generate() + fileName
-        metaStore.addChunk(fileName, i.asInstanceOf[Double], i.toString)
+        metaStore.addChunk(fileName, i.asInstanceOf[Double], key)
         dataStore.addData(key, byteBuffer.array())
         byteBuffer.clear()
       }
       //Read until EOF
-      val finalChunkSize = fileSize - chunkSize * (chunkCnt - 1)
+      val finalChunkSize = fileSize - (chunkSize * (chunkCnt - 1))
       val finalByteBuffer = ByteBuffer.allocate(finalChunkSize)
       var byte = inputStream.read()
       while (byte != -1)
       {
         finalByteBuffer.put(byte.toByte)
+        byte = inputStream.read()
       }
       var key = RandomGenerator.generate() + fileName
-      metaStore.addChunk(fileName, chunkCnt.asInstanceOf[Double], chunkCnt.toString)
+      metaStore.addChunk(fileName, chunkCnt.asInstanceOf[Double], key)
       dataStore.addData(key, finalByteBuffer.array())
-      metaStore.setFileStatus(fileName, FileStatus.READING)
+      metaStore.updateFileChunkCount(fileName, chunkCnt)
+      metaStore.setFileStatus(fileName, FileStatus.WRITING, -1)
+    }
+    else
+    {
+      throw new IOException("Cannot write to file")
     }
   }
 
-  def read(fileName: String) : SpeedBuf = {
-    val buffer = new UnBoundedFifoBuf
+  def read(fileName: String): SpeedBuf =
+  {
+    val status = metaStore.getFileStatus(fileName)
+    if (status == FileStatus.IDLE || status == FileStatus.READING)
+    {
+      metaStore.setFileStatus(fileName, FileStatus.READING, 1)
 
-    class Worker (val buffer : UnBoundedFifoBuf) extends Actor {
-      def act()
+      var buffer = new UnBoundedFifoBuf
+
+      case object Start
+
+      class Worker extends Actor
       {
-        val prefetchSize = config.preFetchSize
-        var chunkList = metaStore.listChunk(fileName)
-        var numChunks = chunkList.size
-        while (numChunks >= 0)
+        log.info("Created Worker for reading data chunk of file " + fileName)
+        buffer.bufWriteComplete = SpeedBufStatus.NO
+
+        def act()
         {
-          val rightSet = chunkList drop prefetchSize
-          val leftSet = chunkList diff rightSet
-          val kv = dataStore.multiGetData(leftSet.toArray)
-          for (item <- leftSet)
+          val start: Long = System.currentTimeMillis()
+          val prefetchSize = config.preFetchSize
+          var chunkList = metaStore.listChunk(fileName)
+          var numChunks = chunkList.size
+          while (numChunks > 0)
           {
-            buffer.write(kv(item))
-            chunkList = chunkList - item
+            val rightSet = chunkList drop prefetchSize
+            val leftSet = chunkList diff rightSet
+            val kv = dataStore.multiGetData(leftSet.toArray)
+            for (item <- leftSet)
+            {
+              buffer.write(kv(item))
+              buffer.bufReadable = SpeedBufStatus.YES
+              chunkList = chunkList - item
+            }
+            numChunks = numChunks - prefetchSize
           }
-          numChunks = numChunks - prefetchSize
+          metaStore.setFileStatus(fileName, FileStatus.READING, -1)
+          buffer.bufWriteComplete = SpeedBufStatus.YES
+          log.info("Completed reading the file " + fileName + " in " + (System.currentTimeMillis - start) + "ms")
+        }
+
+        protected def receive =
+        {
+          case Start => act()
+                        context.stop(self)
         }
       }
+      val system = ActorSystem("DataStreamPopulators")
+      val worker = system.actorOf(Props(new Worker()), name = "worker")
+      worker ! Start
+      return buffer
     }
-    val worker = new Worker(buffer)
-    worker.start()
-    return buffer
+    else
+    {
+      throw new IOException("Cannot read the file")
+    }
   }
 
-  def delete(fileName: String) : Boolean = {
+  def delete(fileName: String): Boolean =
+  {
     if (metaStore.getFileStatus(fileName) == FileStatus.IDLE)
     {
+      metaStore.setFileStatus(fileName, FileStatus.DELETING, 1)
       var chunkList = metaStore.listChunk(fileName)
       for (item <- chunkList)
         dataStore.deleteData(item)
@@ -111,13 +153,14 @@ class StoreManager (config : LightningConfig) extends Speed{
       false
   }
 
-  def ls() : Array[Pair[String,  FileStatus.Value]] = {
+  def ls(): Array[Pair[String, FileStatus.Value]] =
+  {
     val status = metaStore.listFiles()
     val returnArr = new Array[Pair[String, FileStatus.Value]](status.size)
     var i = 0
-    for ((k,v) <- status)
+    for ((k, v) <- status)
     {
-      returnArr(i) = Pair[String,  FileStatus.Value](k,FileStatus.withName(v))
+      returnArr(i) = Pair[String, FileStatus.Value](k, FileStatus.withName(v))
     }
     return returnArr
   }

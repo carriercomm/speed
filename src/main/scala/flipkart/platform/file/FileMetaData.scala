@@ -8,5 +8,9 @@ package flipkart.platform.file
  * To change this template use File | Settings | File Templates.
  */
 
-class FileMetaData (val fileName:String, val size : Int){
+class FileMetaData (val fileName:String, val size : Long){
+
+  override def toString() : String = {
+    "Name :" + fileName + " Size : " + size
+  }
 }

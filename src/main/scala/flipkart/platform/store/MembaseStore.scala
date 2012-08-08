@@ -14,15 +14,20 @@ import scala.collection.JavaConversions._
  */
 
 class MembaseStore(val hosts : Array[String], val bucket : String) extends DataStore{
-  val config: Configuration = new Configuration.ConfigBuilder(hosts, "bucket", "bucket", "").
+  val config: Configuration = new Configuration.ConfigBuilder(hosts, bucket, bucket, "").
           withConnPoolSize(10).withCompressTh(512).withOperationTimeOut(1, TimeUnit.SECONDS).build
 
   val dataStore = CacheFactory.newCache(config)
 
+  log.info("Created Membase store " + hosts.toString + "Bucket :" + bucket)
+
   def addData(key: String, value: Array[Byte]) = {
     val futureResult = dataStore.add(key, value)
 
-    futureResult.get()
+    val result = futureResult.get()
+
+    log.debug("Added data with key " + key + " with result of the operation " + result)
+    result
   }
 
   def getData(key: String) = {

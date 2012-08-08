@@ -2,7 +2,8 @@ package flipkart.platform
 
 import buffer.SpeedBuf
 import file.{FileStatus, FileMetaData}
-import java.io.InputStream
+import java.io.{IOException, InputStream}
+import com.codahale.logula.Logging
 
 
 /**
@@ -13,7 +14,7 @@ import java.io.InputStream
  * To change this template use File | Settings | File Templates.
  */
 
-trait Speed {
+trait Speed extends Logging {
   /**
    * Creates a new file on the store.
    * Returns true if creation succeeds
@@ -22,6 +23,7 @@ trait Speed {
 
   /**
    * Writes the inputStream as the content of the file.
+   * can throw IOException
    */
   def write(fileName : String,  inputStream : InputStream)
 

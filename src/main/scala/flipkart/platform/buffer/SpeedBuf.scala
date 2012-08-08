@@ -1,5 +1,7 @@
 package flipkart.platform.buffer
 
+import com.codahale.logula.Logging
+
 /**
  * Created by IntelliJ IDEA.
  * User: vivekys
@@ -8,7 +10,7 @@ package flipkart.platform.buffer
  * To change this template use File | Settings | File Templates.
  */
 
-trait SpeedBuf {
+trait SpeedBuf extends  Logging {
   /**
    * returns a byte from the buffer
    */
@@ -16,7 +18,7 @@ trait SpeedBuf {
 
   /**
    * returns an array of bytes whose length is items
-    */
+   */
   def read (items : Int) : Array[Byte]
 
   /**
@@ -28,4 +30,15 @@ trait SpeedBuf {
    * Writes an sequence of items of type byte to Buffer
    */
   def write (items : Array[Byte])
+
+  def bufReadable () : SpeedBufStatus.Value
+
+  def bufWriteComplete () : SpeedBufStatus.Value
+}
+
+object SpeedBufStatus extends Enumeration
+{
+  val UNKNOWN = Value("Unknown")
+  val YES = Value("Yes")
+  val NO = Value("No")
 }

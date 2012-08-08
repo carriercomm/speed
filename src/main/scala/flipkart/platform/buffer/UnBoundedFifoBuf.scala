@@ -14,6 +14,11 @@ import org.apache.commons.collections.buffer.UnboundedFifoBuffer
 class UnBoundedFifoBuf extends SpeedBuf {
   val buf = new UnboundedFifoBuffer()
 
+  @volatile var bufReadable = SpeedBufStatus.UNKNOWN
+  @volatile var bufWriteComplete = SpeedBufStatus.UNKNOWN
+
+  log.info("Created SpeedBuf " + buf.hashCode())
+
   def read() = buf.remove().asInstanceOf[Byte]
 
   def read(items: Int) : Array[Byte] = {
