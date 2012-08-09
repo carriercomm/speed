@@ -1,9 +1,8 @@
 package flipkart.platform.store
 
-import scala.collection.JavaConversions._
+import scalaj.collection.Imports._
 import redis.clients.jedis._
 import flipkart.platform.file.{FileStatus, FileFields, FileMetaData}
-import java.io.IOException
 import collection.mutable.HashMap
 
 /**
@@ -57,7 +56,7 @@ class RedisStore(val host: String, val port: Int) extends MetaStore
 
   def addChunk(fileName: String, scoreMembers: Map[java.lang.Double, String]) =
   {
-    val returnVal = redisHandler.zadd(schemeFileNameForChunks(fileName), mapAsJavaMap(scoreMembers))
+    val returnVal = redisHandler.zadd(schemeFileNameForChunks(fileName), scoreMembers.asJava)
     log.debug("Added chunk FileName :" + fileName + " Map [ChunkSeq, ChunkId] : " + scoreMembers.toString()
       + " ReturnVal of Operation : " + returnVal.toString)
   }
@@ -189,8 +188,8 @@ class RedisStore(val host: String, val port: Int) extends MetaStore
 
   def listChunk(fileName: String) =
   {
-    val returnVal = asScalaSet(redisHandler.zrangeByScore(schemeFileNameForChunks(fileName),
-      Double.NegativeInfinity, Double.PositiveInfinity))
+    val returnVal = redisHandler.zrangeByScore(schemeFileNameForChunks(fileName),
+      Double.NegativeInfinity, Double.PositiveInfinity).asScalaMutable
 
     log.debug("List of chunk for fileName : " + fileName + " Chunks : " + returnVal.toString())
 
@@ -214,9 +213,9 @@ class RedisStore(val host: String, val port: Int) extends MetaStore
 
   def deleteFile(fileName: String): Boolean =
   {
-      redisHandler.del(schemeFileNameForChunks(fileName))
-      log.debug("Deleting file from metaStore : " + fileName)
-      return true
+    redisHandler.del(schemeFileNameForChunks(fileName))
+    log.debug("Deleting file from metaStore : " + fileName)
+    return true
   }
 
 }

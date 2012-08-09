@@ -6,7 +6,10 @@ import java.nio.ByteBuffer
 import flipkart.platform.randomGenerator.RandomGenerator
 import java.io.{IOException, InputStream}
 import akka.actor.{Props, ActorSystem, Actor}
+import akka.pattern.ask
 import flipkart.platform.buffer.{SpeedBufStatus, SpeedBuf, UnBoundedFifoBuf}
+import akka.util.Timeout
+import akka.util.duration._
 
 
 /**
@@ -19,6 +22,9 @@ import flipkart.platform.buffer.{SpeedBufStatus, SpeedBuf, UnBoundedFifoBuf}
 
 class StoreManager(config: LightningConfig) extends Speed
 {
+
+  implicit val timeout = Timeout(60 seconds)
+
   val metaStore = new RedisStore(config.metaStoreHost, config.metaStorePort)
 
   val dataStore = new MembaseStore(config.dataStoreHost, config.dataStoreBucket)
@@ -74,6 +80,7 @@ class StoreManager(config: LightningConfig) extends Speed
       dataStore.addData(key, finalByteBuffer.array())
       metaStore.updateFileChunkCount(fileName, chunkCnt)
       metaStore.setFileStatus(fileName, FileStatus.WRITING, -1)
+      finalByteBuffer.clear()
     }
     else
     {
@@ -101,21 +108,15 @@ class StoreManager(config: LightningConfig) extends Speed
         {
           val start: Long = System.currentTimeMillis()
           val prefetchSize = config.preFetchSize
-          var chunkList = metaStore.listChunk(fileName)
-          var numChunks = chunkList.size
-          while (numChunks > 0)
-          {
-            val rightSet = chunkList drop prefetchSize
-            val leftSet = chunkList diff rightSet
-            val kv = dataStore.multiGetData(leftSet.toArray)
-            for (item <- leftSet)
-            {
+          val chunkList = metaStore.listChunk(fileName).toSeq
+          val chuckIter = chunkList grouped prefetchSize
+          chuckIter.foreach( grp => {
+            val kv = dataStore.multiGetData(grp.toArray)
+            grp.foreach( item => {
               buffer.write(kv(item))
               buffer.bufReadable = SpeedBufStatus.YES
-              chunkList = chunkList - item
-            }
-            numChunks = numChunks - prefetchSize
-          }
+            })
+          })
           metaStore.setFileStatus(fileName, FileStatus.READING, -1)
           buffer.bufWriteComplete = SpeedBufStatus.YES
           log.info("Completed reading the file " + fileName + " in " + (System.currentTimeMillis - start) + "ms")
@@ -123,13 +124,13 @@ class StoreManager(config: LightningConfig) extends Speed
 
         protected def receive =
         {
-          case Start => act()
+          case Start => sender ! act()
                         context.stop(self)
         }
       }
       val system = ActorSystem("DataStreamPopulators")
       val worker = system.actorOf(Props(new Worker()), name = "worker")
-      worker ! Start
+      worker ? Start
       return buffer
     }
     else

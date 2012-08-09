@@ -23,9 +23,9 @@ class AppTest extends TestCase
 
   val bucket = "datastore"
 
-  val dataChunkSize = 8
+  val dataChunkSize = 1
 
-  val preFetchSize = 2
+  val preFetchSize = 1
 
   val logFile = "/tmp/SpeedTest.log"
 
@@ -119,24 +119,20 @@ class AppTest extends TestCase
 
     val dataRead = ListBuffer[Byte]()
 
-    while (buf.bufReadable() != SpeedBufStatus.YES)
-    {}
 
-    var retry = 0
-    while (retry < 10)
+    var byteCount = file.length()
+
+    while (byteCount > 0)
     {
       try
       {
-        while (true)
-        {
-          dataRead.append(buf.read())
-        }
+        dataRead.append(buf.read())
+        byteCount -= 1
       }
       catch
       {
         case e: BufferUnderflowException => "Empty !!"
                 Thread.sleep(10)
-                retry += 1
       }
     }
 
