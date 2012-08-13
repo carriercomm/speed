@@ -1,9 +1,14 @@
 package flipkart.platform.store
 
-import scalaj.collection.Imports._
-import redis.clients.jedis._
 import flipkart.platform.file.{FileStatus, FileFields, FileMetaData}
 import collection.mutable.HashMap
+import akka.actor.{Props, Actor}
+import akka.pattern.ask
+import akka.util.Timeout
+import akka.util.duration._
+import akka.dispatch.Await
+import com.redis.RedisClientPool
+
 
 /**
  * Created by IntelliJ IDEA.
@@ -15,207 +20,161 @@ import collection.mutable.HashMap
 
 class RedisStore(val host: String, val port: Int) extends MetaStore
 {
-
-  val redisHandler = new Jedis(host, port)
-
-  val FILEMAP = "FILEMAP"
-
-  val FILEDIR = "FILEDIR"
-
-  val FILECHUNK = "FILECHUNK"
+  val redisPool = new RedisClientPool(host, port)
 
   log.info("Creating RedisStore with = " + host + ":" + port)
 
-  private def schemeFileNameForDir(fileName: String) = FILEMAP + fileName
-
-  private def schemeFileNameForChunks(fileName: String) = FILECHUNK + fileName
-
   def createFile(fileName: String, attr: FileMetaData): Boolean =
   {
-    if (redisHandler.hexists(FILEDIR, fileName))
+    redisPool.withClient
     {
-      log.debug("Creation of file :" + fileName + " failed")
-      return false
+      redisHandler =>
+        if (redisHandler.hexists(MetaStoreUtil.FILEDIR, fileName))
+        {
+          log.debug("Creation of file :" + fileName + " failed")
+          return false
+        }
+        else
+        {
+          redisHandler.hset(MetaStoreUtil.FILEDIR, fileName, fileName)
+          setFileMetaData(fileName, attr)
+          log.debug("Created file :" + fileName + " On meta store")
+          return true
+        }
     }
-    else
-    {
-      redisHandler.hset(FILEDIR, fileName, fileName)
-      setFileMetaData(fileName, attr)
-      log.debug("Created file :" + fileName + " On meta store")
-      return true
-    }
-
   }
 
-  def addChunk(fileName: String, chunkSeq: Double, chunkId: String) =
+  def addChunk(fileName: String, chunkSeq: Double, chunkId: String)
   {
-    val returnVal = redisHandler.zadd(schemeFileNameForChunks(fileName), chunkSeq, chunkId)
-    log.debug("Added chunk FileName :" + fileName + " ChunkSeq : " + chunkSeq.toString
-      + " ChunkID : " + chunkId.toString + " ReturnVal of Operation : " + returnVal.toString)
-  }
-
-  def addChunk(fileName: String, scoreMembers: Map[java.lang.Double, String]) =
-  {
-    val returnVal = redisHandler.zadd(schemeFileNameForChunks(fileName), scoreMembers.asJava)
-    log.debug("Added chunk FileName :" + fileName + " Map [ChunkSeq, ChunkId] : " + scoreMembers.toString()
-      + " ReturnVal of Operation : " + returnVal.toString)
+    redisPool.withClient
+    {
+      redisHandler =>
+        val returnVal = redisHandler.zadd(MetaStoreUtil.schemeFileNameForChunks(fileName), chunkSeq, chunkId)
+        log.debug("Added chunk FileName :" + fileName + " ChunkSeq : " + chunkSeq.toString
+          + " ChunkID : " + chunkId.toString + " ReturnVal of Operation : " + returnVal.toString)
+    }
   }
 
   def setFileStatus(fileName: String, status: FileStatus.Value, opCount: Int) =
   {
-    log.info("Received setFileStatus for " + fileName + " Status : " + status + " OpCnt " + opCount)
-    val op = redisHandler.hget(schemeFileNameForDir(fileName), FileFields.STATUS.toString)
-
-    status match
+    redisPool.withClient
     {
-      case FileStatus.IDLE if opCount == 0 =>
-        redisHandler.hset(schemeFileNameForDir(fileName), FileFields.STATUS.toString, FileStatus.IDLE.toString)
-        redisHandler.hset(schemeFileNameForDir(fileName), FileFields.OPCNT.toString, 0.toString)
-        log.info("Setting File Status " + fileName + " to IDLE")
+      redisHandler =>
+        log.info("Received setFileStatus for " + fileName + " Status : " + status + " OpCnt " + opCount)
+        implicit val timeout = Timeout(10 seconds)
+        val actor = SpeedActorSystem.getFileStateActor()
 
-      case FileStatus.WRITING if opCount == -1 =>
-        val opCnt = redisHandler.hget(schemeFileNameForDir(fileName), FileFields.OPCNT.toString).toInt
-        if (opCnt <= 1 &&
-          op == FileStatus.WRITING.toString)
-          setFileStatus(fileName, FileStatus.IDLE, 0)
-        else
-          log.error("SetFileStatus -- FileName : " + fileName + " FileStatus : " + status.toString
-            + " OpCnt : " + opCount.toString + "Current Status : " + op)
-
-      case FileStatus.WRITING if opCount == 1 =>
-        val opCnt = redisHandler.hget(schemeFileNameForDir(fileName), FileFields.OPCNT.toString).toInt
-        if (op == FileStatus.IDLE.toString)
-        {
-          redisHandler.hset(schemeFileNameForDir(fileName), FileFields.STATUS.toString, FileStatus.WRITING.toString)
-          redisHandler.hset(schemeFileNameForDir(fileName), FileFields.OPCNT.toString, (opCnt + 1).toString)
-          log.info("Setting File Status " + fileName + " to WRITING")
-        }
-        else
-        {
-          log.warn("SetFileStatus -- FileName : " + fileName + " FileStatus : " + status.toString
-            + " OpCnt : " + opCount.toString + "Current Status : " + op)
-        }
-
-      case FileStatus.READING if opCount == -1 =>
-        val opCnt = redisHandler.hget(schemeFileNameForDir(fileName), FileFields.OPCNT.toString).toInt
-        if (op == FileStatus.READING.toString)
-        {
-          if (opCnt <= 1)
-            setFileStatus(fileName, FileStatus.IDLE, 0)
-          else
-          {
-            redisHandler.hset(schemeFileNameForDir(fileName), FileFields.STATUS.toString, FileStatus.READING.toString)
-            redisHandler.hset(schemeFileNameForDir(fileName), FileFields.OPCNT.toString, (opCnt - 1).toString)
-            log.info("Setting File Status " + fileName + " to Reading with decremented opCnt")
-          }
-        }
-        else
-          log.error("SetFileStatus -- FileName : " + fileName + " FileStatus : " + status.toString
-            + " OpCnt : " + opCount.toString + "Current Status : " + op)
-
-      case FileStatus.READING if opCount == 1 =>
-        val opCnt = redisHandler.hget(schemeFileNameForDir(fileName), FileFields.OPCNT.toString).toInt
-        val op = redisHandler.hget(schemeFileNameForDir(fileName), FileFields.STATUS.toString)
-        if (op == FileStatus.IDLE.toString ||
-          op == FileStatus.READING.toString)
-        {
-          redisHandler.hset(schemeFileNameForDir(fileName), FileFields.STATUS.toString, FileStatus.READING.toString)
-          redisHandler.hset(schemeFileNameForDir(fileName), FileFields.OPCNT.toString, (opCnt + 1).toString)
-          log.info("Setting File Status " + fileName + " to Reading")
-        }
-        else
-        {
-          log.warn("SetFileStatus -- FileName : " + fileName + " FileStatus : " + status.toString
-            + " OpCnt : " + opCount.toString + "Current Status : " + op)
-        }
-
-      case FileStatus.DELETING if opCount == -1 =>
-        val opCnt = redisHandler.hget(schemeFileNameForDir(fileName), FileFields.OPCNT.toString).toInt
-        if (opCnt <= 1 &&
-          op == FileStatus.DELETING.toString)
-          setFileStatus(fileName, FileStatus.IDLE, 0)
-        else
-          log.error("SetFileStatus -- FileName : " + fileName + " FileStatus : " + status.toString
-            + " OpCnt : " + opCount.toString + "Current Status : " + op)
-
-      case FileStatus.DELETING if opCount == 1 =>
-        val opCnt = redisHandler.hget(schemeFileNameForDir(fileName), FileFields.OPCNT.toString).toInt
-        val op = redisHandler.hget(schemeFileNameForDir(fileName), FileFields.STATUS.toString)
-        if (op == FileStatus.IDLE.toString)
-        {
-          redisHandler.hset(schemeFileNameForDir(fileName), FileFields.STATUS.toString, FileStatus.DELETING.toString)
-          redisHandler.hset(schemeFileNameForDir(fileName), FileFields.OPCNT.toString, (opCnt + 1).toString)
-          log.info("Setting File Status " + fileName + " to Deleting")
-        }
-        else
-        {
-          log.warn("SetFileStatus -- FileName : " + fileName + " FileStatus : " + status.toString
-            + " OpCnt : " + opCount.toString + "Current Status : " + op)
-        }
+        val future = actor ? FileStateMsg(fileName, status, opCount, redisHandler)
+        val result = Await.result(future, timeout.duration).asInstanceOf[Boolean]
+        log.info("SetFileStatus - FileName : " + fileName + " Status : " + status + " opCount :" + opCount +
+          " result :" + result)
+        result
     }
   }
 
   def setFileMetaData(fileName: String, attr: FileMetaData) =
   {
-    redisHandler.hset(schemeFileNameForDir(fileName), FileFields.NAME.toString, fileName)
-    redisHandler.hset(schemeFileNameForDir(fileName), FileFields.SIZE.toString, attr.size.toString)
-    updateFileChunkCount(fileName, 0)
-    setFileStatus(fileName, FileStatus.IDLE, 0)
-    log.debug("Setting file metadata : " + attr.toString)
+    redisPool.withClient
+    {
+      redisHandler =>
+        redisHandler.hset(MetaStoreUtil.schemeFileNameForDir(fileName), FileFields.NAME.toString, fileName)
+        redisHandler.hset(MetaStoreUtil.schemeFileNameForDir(fileName), FileFields.SIZE.toString, attr.size.toString)
+        updateFileChunkCount(fileName, 0)
+        setFileStatus(fileName, FileStatus.IDLE, 0)
+        log.debug("Setting file metadata : " + attr.toString)
+    }
   }
 
-  def updateFileChunkCount(fileName: String, chunkCnt: Int) =
+  def updateFileChunkCount(fileName: String, chunkCnt: Int)
   {
-    val returnValue = redisHandler.hset(schemeFileNameForDir(fileName), FileFields.NUMCHUNKS.toString, chunkCnt.toString)
-    log.debug("updating File Chunk count for file name : " + fileName
-      + " with value :" + chunkCnt.toString + " with return value : " + returnValue.toString)
-
+    redisPool.withClient
+    {
+      redisHandler =>
+        val returnValue = redisHandler.hset(MetaStoreUtil.schemeFileNameForDir(fileName),
+          FileFields.NUMCHUNKS.toString, chunkCnt.toString)
+        log.debug("updating File Chunk count for file name : " + fileName
+          + " with value :" + chunkCnt.toString + " with return value : " + returnValue.toString)
+    }
   }
 
   def getFileStatus(fileName: String) =
   {
-    val returnValue = FileStatus.withName(redisHandler.hget(schemeFileNameForDir(fileName), FileFields.STATUS.toString))
-    log.debug("File status for : " + fileName + " Status : " + returnValue.toString)
-    returnValue
+    redisPool.withClient
+    {
+      redisHandler =>
+        val returnValue = FileStatus.withName(redisHandler.hget(MetaStoreUtil.schemeFileNameForDir(fileName),
+          FileFields.STATUS.toString) match {
+          case Some(x) => x
+          case None => log.error("Unable to get file status")
+                       FileStatus.UNKNOWN.toString
+        })
+        log.debug("File status for : " + fileName + " Status : " + returnValue.toString)
+        returnValue
+    }
   }
 
   def getFileSize(fileName: String): Int =
   {
-    val returnVal = redisHandler.hget(schemeFileNameForDir(fileName), FileFields.SIZE.toString).toInt
-    log.debug("FileSize for fileName : " + fileName + "Size : " + returnVal.toString)
-    returnVal
+    redisPool.withClient
+    {
+      redisHandler =>
+        val returnVal = redisHandler.hget(MetaStoreUtil.schemeFileNameForDir(fileName), FileFields.SIZE.toString) match {
+          case Some(x) => x.toInt
+          case None => 0
+        }
+        log.debug("FileSize for fileName : " + fileName + "Size : " + returnVal.toString)
+        returnVal
+    }
   }
 
   def listChunk(fileName: String) =
   {
-    val returnVal = redisHandler.zrangeByScore(schemeFileNameForChunks(fileName),
-      Double.NegativeInfinity, Double.PositiveInfinity).asScalaMutable
+    redisPool.withClient
+    {
+      redisHandler =>
+        val returnVal = redisHandler.zrangebyscore(MetaStoreUtil.schemeFileNameForChunks(fileName),
+          Double.NegativeInfinity, true, Double.PositiveInfinity, true, None) match {
+          case Some(x) => x
+          case None => List[String]()
+        }
+        log.debug("List of chunk for fileName : " + fileName + " Chunks : " + returnVal.toString())
 
-    log.debug("List of chunk for fileName : " + fileName + " Chunks : " + returnVal.toString())
-
-    returnVal
-
+        returnVal
+    }
   }
 
   def listFiles(): HashMap[String, String] =
   {
-    val fileMap = redisHandler.hgetAll(FILEDIR)
-    val returnVal = new HashMap[String, String]()
+    redisPool.withClient
+    {
+      redisHandler =>
+        val fileMap = redisHandler.hgetall(MetaStoreUtil.FILEDIR)
+        val returnVal = new HashMap[String, String]()
+        fileMap match {
+          case Some(x) => x foreach
+                            {
+                                  case (k, v) => returnVal.put(k, redisHandler.hget(MetaStoreUtil
+                                    .schemeFileNameForDir(k), FileFields.STATUS.toString) match {
+                                        case Some(x) => x
+                                        case None => null
+                                  })
+                            }
+          case None => Map[String, String]()
+        }
 
-    fileMap foreach
-      {
-        case (k, v) => returnVal.put(k, redisHandler.hget(schemeFileNameForDir(k), FileFields.STATUS.toString))
-      }
-
-    log.debug("List of files : " + returnVal.toString())
-    return returnVal
+        log.debug("List of files : " + returnVal.toString())
+        return returnVal
+    }
   }
 
-  def deleteFile(fileName: String): Boolean =
+  def deleteFile(fileName: String)
   {
-    redisHandler.del(schemeFileNameForChunks(fileName))
-    log.debug("Deleting file from metaStore : " + fileName)
-    return true
+    redisPool.withClient
+    {
+      redisHandler =>
+        redisHandler.del(MetaStoreUtil.schemeFileNameForChunks(fileName))
+        log.debug("Deleting file from metaStore : " + fileName)
+    }
   }
 
 }

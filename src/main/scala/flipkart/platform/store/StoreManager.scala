@@ -5,11 +5,12 @@ import flipkart.platform.file.{FileStatus, FileMetaData}
 import java.nio.ByteBuffer
 import flipkart.platform.randomGenerator.RandomGenerator
 import java.io.{IOException, InputStream}
-import akka.actor.{Props, ActorSystem, Actor}
+import akka.actor.{Props, Actor}
 import akka.pattern.ask
 import flipkart.platform.buffer.{SpeedBufStatus, SpeedBuf, UnBoundedFifoBuf}
 import akka.util.Timeout
 import akka.util.duration._
+import akka.routing.RoundRobinRouter
 
 
 /**
@@ -124,13 +125,14 @@ class StoreManager(config: LightningConfig) extends Speed
 
         protected def receive =
         {
-          case Start => sender ! act()
+          case Start => act()
                         context.stop(self)
         }
       }
-      val system = ActorSystem("DataStreamPopulators")
-      val worker = system.actorOf(Props(new Worker()), name = "worker")
-      worker ? Start
+      val system = SpeedActorSystem.getActorSystem()
+      val worker = system.actorOf(Props(new Worker()))
+      worker ! Start
+
       return buffer
     }
     else
@@ -151,7 +153,7 @@ class StoreManager(config: LightningConfig) extends Speed
       return true
     }
     else
-      false
+      return false
   }
 
   def ls(): Array[Pair[String, FileStatus.Value]] =

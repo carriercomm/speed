@@ -1,8 +1,8 @@
 package flipkart.platform
 
-import file.{FileStatus, FileMetaData}
-import store.{StoreManager, MembaseStore, RedisStore}
-import java.io.{IOException, InputStream}
+import file.FileMetaData
+import store.StoreManager
+import java.io.InputStream
 
 /**
  * Created by IntelliJ IDEA.

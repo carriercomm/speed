@@ -2,7 +2,7 @@ package flipkart.platform
 
 import buffer.SpeedBuf
 import file.{FileStatus, FileMetaData}
-import java.io.{IOException, InputStream}
+import java.io.InputStream
 import com.codahale.logula.Logging
 
 

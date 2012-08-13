@@ -1,9 +1,7 @@
 package flipkart.platform.store
 
 import flipkart.platform.file.{FileStatus, FileMetaData}
-import collection.parallel.mutable
 import com.codahale.logula.Logging
-import java.io.IOException
 import collection.mutable.HashMap
 
 
@@ -23,11 +21,8 @@ trait MetaStore extends Logging {
   //Adds a chunk ID and map it against seq number for the given file
   def addChunk(fileName: String, chunkSeq : Double, chunkId: String)
 
-  //Adds a chunk ID and map it against seq number for the given file
-  def addChunk(fileName: String, scoreMembers : Map[java.lang.Double, String])
-
   //Set file status
-  def setFileStatus(fileName: String,  status : FileStatus.Value, opCount : Int)
+  def setFileStatus(fileName: String,  status : FileStatus.Value, opCount : Int) :Boolean
 
   //Set file metadata
   def setFileMetaData (fileName : String, attr : FileMetaData)
@@ -42,11 +37,11 @@ trait MetaStore extends Logging {
   def getFileSize(fileName:String) : Int
 
   //list the chunks for a given file in the order
-  def listChunk (fileName : String) : scala.collection.mutable.Set[String]
+  def listChunk (fileName : String) : List[String]
 
   //list files
   def listFiles () : HashMap[String, String]
 
   //delete files
-  def deleteFile (fileName : String) : Boolean
+  def deleteFile (fileName : String)
 }

@@ -5,13 +5,15 @@ import Assert._
 import junit.framework.TestCase
 import flipkart.platform.{Lightning, LightningConfig}
 import flipkart.platform.file.FileMetaData
-import redis.clients.jedis.Jedis
 import flipkart.platform.cachefarm.Prometheus
 import flipkart.platform.cachefarm.config.Configuration
-import org.apache.commons.collections.BufferUnderflowException
-import flipkart.platform.buffer.SpeedBufStatus
 import java.io.{InputStream, FileInputStream, File}
+import com.redis.RedisClient
+import java.nio.BufferUnderflowException
+import flipkart.platform.buffer.SpeedBufStatus
 import collection.mutable.ListBuffer
+import akka.actor.Actors
+import actors.Actor
 
 @Test
 class AppTest extends TestCase
@@ -23,9 +25,9 @@ class AppTest extends TestCase
 
   val bucket = "datastore"
 
-  val dataChunkSize = 1
+  val dataChunkSize = 7
 
-  val preFetchSize = 1
+  val preFetchSize = 3
 
   val logFile = "/tmp/SpeedTest.log"
 
@@ -40,8 +42,8 @@ class AppTest extends TestCase
 
   def resetAllData() =
   {
-    val redisClient = new Jedis(host, port)
-    redisClient.flushAll()
+    val redisClient = new RedisClient(host, port)
+    redisClient.flushall
 
     val membaseClient = new Prometheus(new Configuration("pf-eng1", bucket, bucket, ""))
     membaseClient.flush()
@@ -108,7 +110,6 @@ class AppTest extends TestCase
   def inputStreamToByteArray(is: InputStream): Array[Byte] =
     Iterator continually is.read takeWhile (-1 !=) map (_.toByte) toArray
 
-  @Test
   def testReadFile()
   {
     val file = new File(sampleFile)
@@ -124,15 +125,19 @@ class AppTest extends TestCase
 
     while (byteCount > 0)
     {
-      try
+      if (buf.bufReadable() == SpeedBufStatus.YES)
       {
-        dataRead.append(buf.read())
-        byteCount -= 1
-      }
-      catch
-      {
-        case e: BufferUnderflowException => "Empty !!"
-                Thread.sleep(10)
+        try
+        {
+          Thread.sleep(10)
+          dataRead.append(buf.read())
+          byteCount -= 1
+        }
+        catch
+        {
+          case e: BufferUnderflowException => "Empty !!"
+                  Thread.sleep(10)
+        }
       }
     }
 

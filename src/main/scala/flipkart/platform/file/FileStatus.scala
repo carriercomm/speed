@@ -11,6 +11,8 @@ package flipkart.platform.file
 object FileStatus extends Enumeration{
   val WRITING = Value("Write")
   val READING = Value("Read")
+  val RW = Value("RW")
   val DELETING = Value("Delete")
   val IDLE = Value("Idle")
+  val UNKNOWN = Value("Unknown")
 }
