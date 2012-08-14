@@ -36,14 +36,3 @@ class FileStateManager extends Actor with Logging {
       sender ! (true)
   }
 }
-
-object SpeedActorSystem
-{
-  val system = ActorSystem("speed")
-  val fileStateActor = system.actorOf(Props[FileStateManager], name = "fileStateActor")
-
-  def getActorSystem () = system
-
-  def getFileStateActor () = fileStateActor
-
-}

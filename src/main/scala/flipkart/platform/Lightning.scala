@@ -16,14 +16,14 @@ class Lightning (val config : LightningConfig) extends Speed {
 
   val storeManager = new StoreManager(config)
 
-  def create(fileName: String, metaData: FileMetaData) = {
-    log.info("Request received to create File " + fileName + " with metadata " + metaData)
-    storeManager.create(fileName, metaData)
+  def create(fileName: String) = {
+    log.info("Request received to create File " + fileName)
+    storeManager.create(fileName)
   }
 
-  def write(fileName: String, inputStream: InputStream) = {
-    log.info("Request received for writing to file " + fileName)
-    storeManager.write(fileName, inputStream)
+  def write(fileName: String, metaData: FileMetaData, inputStream: InputStream) = {
+    log.info("Request received for writing to file " + fileName + " with meataData " + metaData)
+    storeManager.write(fileName, metaData, inputStream)
   }
 
   def read(fileName: String) = {
@@ -38,7 +38,11 @@ class Lightning (val config : LightningConfig) extends Speed {
 
   def ls() = {
     log.info("Request received for listing files")
-    val returnval = storeManager.ls()
-    returnval
+    storeManager.ls()
+  }
+
+  def isExist(fileName: String) = {
+    log.info("Request received for isExit " + fileName)
+    storeManager.isExist(fileName)
   }
 }

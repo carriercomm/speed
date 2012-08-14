@@ -13,7 +13,10 @@ class LightningConfig(val metaStoreHost: String, //MetaStore host & in this case
                       val dataStoreHost: Array[String], //DataStore hosts & in this case membase cluster hosts
                       val dataStorePort: Int, //DataStore port & in this case membase cluster port
                       val dataStoreBucket: String, //Membase bucket Name
-                      val dataChunkSize: Int, val preFetchSize: Int,
+                      val dataChunkSize: Int = 10*1024,
+                      val preFetchSize: Int = 10,
+                      val writerConcurrencyFactor: Int = 100,
+                      val readerConcurrencyFactor: Int = 100,
                       val logFile: String)
 {
 

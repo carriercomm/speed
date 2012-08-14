@@ -7,13 +7,14 @@ import flipkart.platform.{Lightning, LightningConfig}
 import flipkart.platform.file.FileMetaData
 import flipkart.platform.cachefarm.Prometheus
 import flipkart.platform.cachefarm.config.Configuration
-import java.io.{InputStream, FileInputStream, File}
 import com.redis.RedisClient
 import java.nio.BufferUnderflowException
 import flipkart.platform.buffer.SpeedBufStatus
 import collection.mutable.ListBuffer
 import akka.actor.Actors
 import actors.Actor
+import rules.ExpectedException
+import java.io._
 
 @Test
 class AppTest extends TestCase
@@ -36,7 +37,7 @@ class AppTest extends TestCase
   val sampleFile = "/Users/vivekys/Temp/sample"
 
   val lightningConfig = new LightningConfig(host, port, Array("pf-eng1"), 8091,
-    bucket, dataChunkSize, preFetchSize, logFile)
+    bucket, dataChunkSize, preFetchSize, 100, 100, logFile)
 
   val lightning = new Lightning(lightningConfig)
 
@@ -61,40 +62,25 @@ class AppTest extends TestCase
   {
     resetAllData()
     val file = new File(sampleFile)
-    assertTrue(lightning.create("sample", new FileMetaData("sample", file.length())))
+    assertTrue(lightning.create("sample"))
   }
 
   @Test
   def testDuplicateCreate()
   {
     val file = new File(sampleFile)
-    assertFalse(lightning.create("sample", new FileMetaData("sample", file.length())))
+    assertFalse(lightning.create("sample"))
   }
 
   @Test
   def testReadBeforeWrite()
   {
-    val fileBuf = lightning.read("sample")
     try
     {
-      while (fileBuf.bufWriteComplete() == SpeedBufStatus.UNKNOWN)
-      {
-        //BUSY LOOP
-      }
-
-      while (fileBuf.bufReadable() == SpeedBufStatus.YES)
-      {
-        val byte = fileBuf.read()
-      }
-
-      while (fileBuf.bufWriteComplete() != SpeedBufStatus.YES)
-      {
-
-      }
-    }
-    catch
+      lightning.read("sample")
+    } catch
     {
-      case e: BufferUnderflowException => assertTrue(true)
+      case ex : IOException => assertTrue(true)
     }
   }
 
@@ -104,7 +90,7 @@ class AppTest extends TestCase
     val file = new File(sampleFile)
     val fin = new FileInputStream(file);
 
-    lightning.write("sample", fin)
+    lightning.write("sample", new FileMetaData("sample", file.length()), fin)
   }
 
   def inputStreamToByteArray(is: InputStream): Array[Byte] =
@@ -115,7 +101,7 @@ class AppTest extends TestCase
     val file = new File(sampleFile)
     val fin = new FileInputStream(file);
     val data = inputStreamToByteArray(fin)
-
+    Thread.sleep(1000)
     val buf = lightning.read("sample")
 
     val dataRead = ListBuffer[Byte]()

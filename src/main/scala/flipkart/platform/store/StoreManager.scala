@@ -11,6 +11,7 @@ import flipkart.platform.buffer.{SpeedBufStatus, SpeedBuf, UnBoundedFifoBuf}
 import akka.util.Timeout
 import akka.util.duration._
 import akka.routing.RoundRobinRouter
+import flipkart.platform.actor.{WriteMasterMsg, WriteMasterActor, SpeedActorSystem}
 
 
 /**
@@ -32,69 +33,31 @@ class StoreManager(config: LightningConfig) extends Speed
 
   val chunkSize = config.dataChunkSize
 
-  def create(fileName: String, metaData: FileMetaData) =
+  def create(fileName: String) =
   {
-    metaStore.createFile(fileName, metaData)
+    metaStore.createFile(fileName)
   }
 
-  def write(fileName: String, inputStream: InputStream) =
+  def write(fileName : String, metaData : FileMetaData, inputStream : InputStream) =
   {
-    if (metaStore.getFileStatus(fileName) == FileStatus.IDLE)
+    if (isExist(fileName) == false)
     {
-      metaStore.setFileStatus(fileName, FileStatus.WRITING, 1)
+      create(fileName)
+    }
+    val version = metaStore.setFileMetaData(fileName, metaData)
 
-      val fileSize = metaStore.getFileSize(fileName)
-      val chunkCnt = fileSize / chunkSize +
-        (if (fileSize % chunkSize == 0)
-          0
-        else
-          1)
-      //Loop for 1 to chunkCnt - 1 which has full chunkSize &
-      //for the last chunk the size will be fileSize - chunkSize * (chunkCnt - 1)
-      val byteBuffer = ByteBuffer.allocate(chunkSize)
-      for (i <- 1 to chunkCnt - 1)
-      {
-        for (j <- 1 to chunkSize)
-        {
-          var byte = inputStream.read()
-          if (byte == -1)
-            log.error("Something got screwed")
-          else
-            byteBuffer.put(byte.toByte)
-        }
-        var key = RandomGenerator.generate() + fileName
-        metaStore.addChunk(fileName, i.asInstanceOf[Double], key)
-        dataStore.addData(key, byteBuffer.array())
-        byteBuffer.clear()
-      }
-      //Read until EOF
-      val finalChunkSize = fileSize - (chunkSize * (chunkCnt - 1))
-      val finalByteBuffer = ByteBuffer.allocate(finalChunkSize)
-      var byte = inputStream.read()
-      while (byte != -1)
-      {
-        finalByteBuffer.put(byte.toByte)
-        byte = inputStream.read()
-      }
-      var key = RandomGenerator.generate() + fileName
-      metaStore.addChunk(fileName, chunkCnt.asInstanceOf[Double], key)
-      dataStore.addData(key, finalByteBuffer.array())
-      metaStore.updateFileChunkCount(fileName, chunkCnt)
-      metaStore.setFileStatus(fileName, FileStatus.WRITING, -1)
-      finalByteBuffer.clear()
-    }
-    else
-    {
-      throw new IOException("Cannot write to file")
-    }
+    val system = SpeedActorSystem.getActorSystem()
+
+    val writeMasterActor = system.actorOf(Props[WriteMasterActor])
+
+    writeMasterActor ! WriteMasterMsg(fileName, version, metaData, metaStore, dataStore, config, inputStream)
   }
 
   def read(fileName: String): SpeedBuf =
   {
-    val status = metaStore.getFileStatus(fileName)
-    if (status == FileStatus.IDLE || status == FileStatus.READING)
+    if (metaStore.isExist(fileName) && metaStore.getFileStatus(fileName) == FileStatus.Active)
     {
-      metaStore.setFileStatus(fileName, FileStatus.READING, 1)
+      //Register the reader for book keeper
 
       var buffer = new UnBoundedFifoBuf
 
@@ -118,7 +81,6 @@ class StoreManager(config: LightningConfig) extends Speed
               buffer.bufReadable = SpeedBufStatus.YES
             })
           })
-          metaStore.setFileStatus(fileName, FileStatus.READING, -1)
           buffer.bufWriteComplete = SpeedBufStatus.YES
           log.info("Completed reading the file " + fileName + " in " + (System.currentTimeMillis - start) + "ms")
         }
@@ -143,17 +105,8 @@ class StoreManager(config: LightningConfig) extends Speed
 
   def delete(fileName: String): Boolean =
   {
-    if (metaStore.getFileStatus(fileName) == FileStatus.IDLE)
-    {
-      metaStore.setFileStatus(fileName, FileStatus.DELETING, 1)
-      var chunkList = metaStore.listChunk(fileName)
-      for (item <- chunkList)
-        dataStore.deleteData(item)
-      metaStore.deleteFile(fileName)
-      return true
-    }
-    else
-      return false
+    //Yet to implement
+    true
   }
 
   def ls(): Array[Pair[String, FileStatus.Value]] =
@@ -166,5 +119,9 @@ class StoreManager(config: LightningConfig) extends Speed
       returnArr(i) = Pair[String, FileStatus.Value](k, FileStatus.withName(v))
     }
     return returnArr
+  }
+
+  def isExist (fileName : String) = {
+    metaStore.isExist(fileName)
   }
 }

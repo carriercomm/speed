@@ -19,13 +19,13 @@ trait Speed extends Logging {
    * Creates a new file on the store.
    * Returns true if creation succeeds
    */
-  def create(fileName : String, metaData : FileMetaData) : Boolean
+  def create(fileName : String) : Boolean
 
   /**
    * Writes the inputStream as the content of the file.
    * can throw IOException
    */
-  def write(fileName : String,  inputStream : InputStream)
+  def write(fileName : String, metaData : FileMetaData, inputStream : InputStream)
 
   /**
    * If the file is readable then returns a stream buffer from which complete
@@ -50,4 +50,9 @@ trait Speed extends Logging {
    * Returns the list of file along with its state from the store
    */
   def ls () : Array[Pair[String,  FileStatus.Value]]
+
+  /**
+   * isExist - returns the existance of the file
+   */
+  def isExist (fileName : String) : Boolean
 }
