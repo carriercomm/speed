@@ -3,6 +3,7 @@ package flipkart.platform.store
 import flipkart.platform.file.{FileStatus, FileMetaData}
 import com.codahale.logula.Logging
 import collection.mutable.HashMap
+import akka.actor.ActorRef
 
 
 /**
@@ -46,7 +47,9 @@ trait MetaStore extends Logging {
   def getCurrentVersion(fileName: String) : Int
 
   //list the chunks for a given file in the order
-  def listChunk (fileName : String) : List[String]
+  def listChunkForCurrentVersion (fileName : String) : List[String]
+
+  def listChunkForFileId (fileId : String) : List[String]
 
   //list files
   def listFiles () : HashMap[String, String]
@@ -56,4 +59,35 @@ trait MetaStore extends Logging {
 
   //isExist
   def isExist(fileName : String) : Boolean
+
+  def rm (fileId :String) : List[String]
+
+  def addReadActorToActiveSet (actorRef : String)
+
+  def removeReadActor (actorRef : String)
+
+  def getReadActorActiveSet () : Option[Set[Option[String]]]
+
+  def updateReadActorEpoch (actorRef : String, fileName : String,  version : Int)
+
+  def getReadActorAccess (actorRef : String) : Option[Map[String, String]]
+
+  def updateReadFileCount (fileID:String,  value:Int)
+
+  def getReadFileCountSet () : List[(String, Double)]
+
+  def addWriteActorToActiveSet (actorRef : String)
+
+  def removeWriteActor (actorRef : String)
+
+  def getWriteActorActiveSet () : Option[Set[Option[String]]]
+
+  def updateWriteActorEpoch (actorRef : String, fileName : String,  version : Int)
+
+  def getWriteActorAccess (actorRef : String) : Option[Map[String, String]]
+
+  def updateWriteFileCount (fileID:String,  value:Int)
+
+  def getWriteFileCountSet () : List[(String, Double)]
+
 }

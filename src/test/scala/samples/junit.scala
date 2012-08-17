@@ -61,14 +61,12 @@ class AppTest extends TestCase
   def testCreate()
   {
     resetAllData()
-    val file = new File(sampleFile)
     assertTrue(lightning.create("sample"))
   }
 
   @Test
   def testDuplicateCreate()
   {
-    val file = new File(sampleFile)
     assertFalse(lightning.create("sample"))
   }
 
@@ -101,7 +99,8 @@ class AppTest extends TestCase
     val file = new File(sampleFile)
     val fin = new FileInputStream(file);
     val data = inputStreamToByteArray(fin)
-    Thread.sleep(1000)
+
+    Thread.sleep(20000)
     val buf = lightning.read("sample")
 
     val dataRead = ListBuffer[Byte]()
@@ -115,14 +114,13 @@ class AppTest extends TestCase
       {
         try
         {
-          Thread.sleep(10)
+          Thread.sleep(100)
           dataRead.append(buf.read())
           byteCount -= 1
         }
         catch
         {
-          case e: BufferUnderflowException => "Empty !!"
-                  Thread.sleep(10)
+          case _ => println("Empty !!")
         }
       }
     }

@@ -1,5 +1,7 @@
 package flipkart.platform.file
 
+import akka.actor.ActorRef
+
 /**
  * Created by IntelliJ IDEA.
  * User: vivekys
@@ -30,6 +32,27 @@ package flipkart.platform.file
  *
  * FileChunk+fileName+version --- Redis Sorted
  ****** chunks
+ *
+ * ActiveReadActorSet  --- Redis Set containing all active readers
+ *
+ * ActiveReadActorMap+actorRef  --- Redis Hashmap
+ ******* FileName+Version -- LastAccess
+ *
+ * ActiveReadFile  --- Redis Hashmap
+ ******* FileName+Version  -- ReadActorCount
+ *
+ * ActiveWriteActorSet  --- Redis Set containing all active readers
+ *
+ * ActiveWriteActor+actorRef  --- Redis Hashmap
+ ******* FileName+Version -- LastAccess
+ *
+ * ActiveWriteFile  --- Redis Hashmap
+ ******* FileName+Version  -- ReadActorCount
+ *
+ * FileReadCount --- Redis Sorted Set
+ *
+ * FileWriteCount --- Redis Sorted Set
+ *
  */
 
 object FileMapFileNameFields extends Enumeration {
@@ -54,7 +77,29 @@ object MetaStoreUtil {
 
   def schemeFileNameVersion (fileName : String,  version : Int) = "FileMap"+fileName+version
 
+  def schemeFileNameVersion (fileId : String) = "FileMap"+fileId
+
   def schemeFileChunk(fileName :String, version : Int) = "FileChunk"+fileName+version
+
+  def schemeFileChunk(fileId :String) = "FileChunk"+fileId
+
+  def schemeActiveReadActorSet () = "ActiveReadActorSet"
+
+  def schemeActiveWriteActorSet () = "ActiveWriteActorSet"
+
+  def schemeActiveReadActorMap (actorRef : String) = "ActiveReadActorMap" + actorRef
+
+  def schemeActiveWriteActorMap (actorRef : String) = "ActiveWriteActorMap" + actorRef
+
+  def schemeActorReadFile () = "ActorReadFile"
+
+  def schemeActorWriteFile () = "ActorWriteFile"
+
+  def schemeFileID (fileName:String,  version:Int) = fileName+version
+
+  def schemeFileReadCount () = "FileReadCount"
+
+  def schemeFileWriteCount () = "FileWriteCount"
 }
 
 object FileStatus extends Enumeration{

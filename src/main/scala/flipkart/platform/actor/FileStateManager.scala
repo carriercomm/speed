@@ -3,7 +3,7 @@ package flipkart.platform.actor
 import flipkart.platform.file._
 import com.codahale.logula.Logging
 import com.redis.RedisClient
-import akka.actor.{ActorRef, Props, ActorSystem, Actor}
+import akka.actor._
 
 /**
  * Created by IntelliJ IDEA.
@@ -36,3 +36,7 @@ class FileStateManager extends Actor with Logging {
       sender ! (true)
   }
 }
+
+
+
+

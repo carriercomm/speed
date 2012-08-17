@@ -8,10 +8,12 @@ import java.io.{IOException, InputStream}
 import akka.actor.{Props, Actor}
 import akka.pattern.ask
 import flipkart.platform.buffer.{SpeedBufStatus, SpeedBuf, UnBoundedFifoBuf}
-import akka.util.Timeout
 import akka.util.duration._
 import akka.routing.RoundRobinRouter
-import flipkart.platform.actor.{WriteMasterMsg, WriteMasterActor, SpeedActorSystem}
+import flipkart.platform.actor._
+import akka.util.Duration._
+import java.util.concurrent.TimeUnit
+import akka.util.{Duration, Timeout}
 
 
 /**
@@ -32,6 +34,13 @@ class StoreManager(config: LightningConfig) extends Speed
   val dataStore = new MembaseStore(config.dataStoreHost, config.dataStoreBucket)
 
   val chunkSize = config.dataChunkSize
+  val actorSystem = SpeedActorSystem.getActorSystem()
+  val janitorActorRef = actorSystem.actorOf(Props(new JanitorActor(metaStore, dataStore)))
+  actorSystem.scheduler.schedule(Duration(2, TimeUnit.MINUTES), Duration(2, TimeUnit.MINUTES),
+        janitorActorRef, Read)
+
+  actorSystem.scheduler.schedule(Duration(2, TimeUnit.MINUTES), Duration(2, TimeUnit.MINUTES),
+        janitorActorRef, Write)
 
   def create(fileName: String) =
   {
@@ -48,53 +57,23 @@ class StoreManager(config: LightningConfig) extends Speed
 
     val system = SpeedActorSystem.getActorSystem()
 
-    val writeMasterActor = system.actorOf(Props[WriteMasterActor])
+    val writeMasterActor = system.actorOf(Props(new WriteMasterActor(metaStore, dataStore, config)))
 
-    writeMasterActor ! WriteMasterMsg(fileName, version, metaData, metaStore, dataStore, config, inputStream)
+    writeMasterActor ! WriteMasterMsg(fileName, version, metaData, inputStream)
+    metaStore.addWriteActorToActiveSet(writeMasterActor.toString())
   }
 
   def read(fileName: String): SpeedBuf =
   {
     if (metaStore.isExist(fileName) && metaStore.getFileStatus(fileName) == FileStatus.Active)
     {
-      //Register the reader for book keeper
 
       var buffer = new UnBoundedFifoBuf
 
-      case object Start
-
-      class Worker extends Actor
-      {
-        log.info("Created Worker for reading data chunk of file " + fileName)
-        buffer.bufWriteComplete = SpeedBufStatus.NO
-
-        def act()
-        {
-          val start: Long = System.currentTimeMillis()
-          val prefetchSize = config.preFetchSize
-          val chunkList = metaStore.listChunk(fileName).toSeq
-          val chuckIter = chunkList grouped prefetchSize
-          chuckIter.foreach( grp => {
-            val kv = dataStore.multiGetData(grp.toArray)
-            grp.foreach( item => {
-              buffer.write(kv(item))
-              buffer.bufReadable = SpeedBufStatus.YES
-            })
-          })
-          buffer.bufWriteComplete = SpeedBufStatus.YES
-          log.info("Completed reading the file " + fileName + " in " + (System.currentTimeMillis - start) + "ms")
-        }
-
-        protected def receive =
-        {
-          case Start => act()
-                        context.stop(self)
-        }
-      }
       val system = SpeedActorSystem.getActorSystem()
-      val worker = system.actorOf(Props(new Worker()))
-      worker ! Start
-
+      val worker = system.actorOf(Props(new ReadMasterActor(metaStore, dataStore, config)))
+      worker ! ReadMasterMsg(fileName, buffer)
+      metaStore.addReadActorToActiveSet(worker.toString())
       return buffer
     }
     else

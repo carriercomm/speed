@@ -1,7 +1,5 @@
 package flipkart.platform.store
 
-import collection.mutable.HashMap
-import akka.actor.{Props, Actor}
 import akka.pattern.ask
 import akka.util.Timeout
 import akka.util.duration._
@@ -9,6 +7,9 @@ import akka.dispatch.Await
 import com.redis.RedisClientPool
 import flipkart.platform.file._
 import flipkart.platform.actor.{FileStateMsg, SpeedActorSystem}
+import akka.actor.{ActorRef, Props, Actor}
+import collection.immutable.TreeSet
+import collection.mutable.{LinkedList, HashMap}
 
 
 /**
@@ -103,14 +104,16 @@ class RedisStore(val host: String, val port: Int) extends MetaStore
     }
   }
 
-  def setFileCurrentVersion(fileName:String, version:Int)
+  def setFileCurrentVersion(fileName: String, version: Int)
   {
     redisPool.withClient
     {
-      redisHandler =>
+      redisHandler => if (getCurrentVersion(fileName) < version)
+      {
         redisHandler.hset(MetaStoreUtil.schemeFileMap(fileName),
-                                  FileMapFileNameFields.CurrentVersion.toString, version)
+          FileMapFileNameFields.CurrentVersion.toString, version)
         log.info("Setting Current Version of File " + fileName + " to " + version)
+      }
     }
   }
 
@@ -138,6 +141,7 @@ class RedisStore(val host: String, val port: Int) extends MetaStore
 
     }
   }
+
   def getFileStatus(fileName: String) =
   {
         val currentVersion = getCurrentVersion(fileName)
@@ -168,7 +172,7 @@ class RedisStore(val host: String, val port: Int) extends MetaStore
     }
   }
 
-  def listChunk(fileName: String) =
+  def listChunkForCurrentVersion(fileName: String) =
   {
     redisPool.withClient
     {
@@ -180,6 +184,21 @@ class RedisStore(val host: String, val port: Int) extends MetaStore
           case None => List[String]()
         }
         log.debug("List of chunk for fileName : " + fileName + " Chunks : " + returnVal.toString())
+        returnVal
+    }
+  }
+
+  def listChunkForFileId (fileId : String) : List[String] =
+  {
+    redisPool.withClient
+    {
+      redisHandler =>
+        val returnVal = redisHandler.zrangebyscore(MetaStoreUtil.schemeFileChunk(fileId),
+          Double.NegativeInfinity, true, Double.PositiveInfinity, true, None) match {
+          case Some(x) => x
+          case None => List[String]()
+        }
+        log.debug("List of chunk for fileName : " + fileId + " Chunks : " + returnVal.toString())
         returnVal
     }
   }
@@ -217,5 +236,162 @@ class RedisStore(val host: String, val port: Int) extends MetaStore
     }
   }
 
+  def rm (fileId :String) : List[String] =
+  {
+    var dataChunkList :List[String] = null
+    redisPool.withClient{
+      redisHandler => {
+        redisHandler.hgetall(MetaStoreUtil.schemeFileNameVersion(fileId)) foreach {
+          fileVersionMap => fileVersionMap foreach {
+            case (fileName, version) => if (getCurrentVersion(fileName) > version.toInt)
+            {
+              setFileStatus(fileName, version.toInt, FileStatus.InActive)
+              dataChunkList = listChunkForFileId(fileId)
+              redisHandler.srem(MetaStoreUtil.schemeFileMapVersionSet(fileName), version)
+              redisHandler.del(MetaStoreUtil.schemeFileNameVersion(fileId))
+              redisHandler.del(MetaStoreUtil.schemeFileChunk(fileId))
+            }
+          }
+        }
+      }
+    }
+    return dataChunkList
+  }
+
+  def addReadActorToActiveSet (actorRef : String)
+  {
+    redisPool.withClient {
+      redisHandle =>
+        redisHandle.sadd(MetaStoreUtil.schemeActiveReadActorSet(), actorRef)
+    }
+    log.debug("Added Read Actor to Set " + actorRef)
+  }
+
+  def getReadActorActiveSet () : Option[Set[Option[String]]] =
+  {
+    redisPool.withClient {
+      redisHandle =>
+        redisHandle.smembers(MetaStoreUtil.schemeActiveReadActorSet())
+    }
+  }
+
+  def removeReadActor (actorRef : String)
+  {
+    redisPool.withClient {
+      redisHandle => redisHandle.pipeline {
+        redisClient => redisClient.srem(MetaStoreUtil.schemeActiveReadActorSet(), actorRef)
+                       redisClient.del(MetaStoreUtil.schemeActiveReadActorMap(actorRef))
+      }
+    }
+    log.debug("Removed Read Actor " + actorRef)
+  }
+
+  def updateReadActorEpoch (actorRef : String, fileName : String,  version : Int)
+  {
+    redisPool.withClient {
+      redisHandle =>
+        redisHandle.hset(MetaStoreUtil.schemeActiveReadActorMap(actorRef),
+            MetaStoreUtil.schemeFileID(fileName, version), System.currentTimeMillis())
+    }
+
+    log.debug("Updated ReadActorEpoch " + actorRef + " For FileID : " + fileName + version)
+  }
+
+  def getReadActorAccess (actorRef : String) : Option[Map[String, String]] =
+  {
+    redisPool.withClient {
+      redisHandle =>
+        redisHandle.hgetall(MetaStoreUtil.schemeActiveReadActorMap(actorRef))
+    }
+  }
+
+  def updateReadFileCount (fileID:String,  value:Int)
+  {
+    redisPool.withClient {
+      redisHandle => redisHandle.zincrby(MetaStoreUtil.schemeFileReadCount(), value, fileID)
+    }
+    log.debug("UpdateReadFileCount : FileID " + fileID + " by :" +value)
+  }
+
+  def getReadFileCountSet () : List[(String, Double)] =
+  {
+    redisPool.withClient {
+      redisHandle =>
+        redisHandle.zrangebyscoreWithScore(MetaStoreUtil.schemeFileReadCount(),
+                Double.NegativeInfinity, true, Double.PositiveInfinity, true, None) match {
+          case Some(x) => x
+          case None => List[(String, Double)]()
+        }
+    }
+  }
+
+  def addWriteActorToActiveSet (actorRef : String)
+  {
+    redisPool.withClient {
+      redisHandle =>
+        redisHandle.sadd(MetaStoreUtil.schemeActiveWriteActorSet(), actorRef)
+    }
+
+    log.debug("Added Write Actor to Set " + actorRef)
+  }
+
+  def getWriteActorActiveSet () : Option[Set[Option[String]]] =
+  {
+    redisPool.withClient {
+      redisHandle =>
+        redisHandle.smembers(MetaStoreUtil.schemeActiveWriteActorSet())
+    }
+  }
+
+  def removeWriteActor (actorRef : String)
+  {
+    redisPool.withClient {
+      redisHandle => redisHandle.pipeline {
+        redisClient => redisClient.srem(MetaStoreUtil.schemeActiveWriteActorSet(), actorRef)
+                       redisClient.del(MetaStoreUtil.schemeActiveWriteActorMap(actorRef))
+      }
+    }
+    log.debug("Removed Write Actor " + actorRef)
+  }
+
+  def updateWriteActorEpoch (actorRef : String, fileName : String,  version : Int)
+  {
+    redisPool.withClient {
+      redisHandle =>
+        redisHandle.hset(MetaStoreUtil.schemeActiveWriteActorMap(actorRef),
+            MetaStoreUtil.schemeFileID(fileName, version), System.currentTimeMillis())
+    }
+
+    log.debug("Updated WriteActorEpoch " + actorRef + " For FileID : " + fileName + version)
+  }
+
+  def getWriteActorAccess (actorRef : String) : Option[Map[String, String]] =
+  {
+    redisPool.withClient {
+      redisHandle =>
+        redisHandle.hgetall(MetaStoreUtil.schemeActiveWriteActorMap(actorRef))
+    }
+  }
+
+  def updateWriteFileCount (fileID:String,  value:Int)
+  {
+    redisPool.withClient {
+      redisHandle => redisHandle.zincrby(MetaStoreUtil.schemeFileWriteCount(), value, fileID)
+    }
+
+    log.debug("UpdateWriteFileCount : FileID " + fileID + " by :" +value)
+  }
+
+  def getWriteFileCountSet () : List[(String, Double)] =
+  {
+    redisPool.withClient {
+      redisHandle =>
+        redisHandle.zrangebyscoreWithScore(MetaStoreUtil.schemeFileWriteCount(),
+                Double.NegativeInfinity, true, Double.PositiveInfinity, true, None) match {
+          case Some(x) => x
+          case None => List[(String, Double)]()
+        }
+    }
+  }
 
 }

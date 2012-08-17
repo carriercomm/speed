@@ -3,6 +3,8 @@ package flipkart.platform.actor
 import akka.actor.ActorSystem._
 import akka.actor.Props._
 import akka.actor.{Props, ActorSystem}
+import akka.util.Duration
+import java.util.concurrent.TimeUnit
 
 /**
  * Created by IntelliJ IDEA.
@@ -15,6 +17,7 @@ import akka.actor.{Props, ActorSystem}
 object SpeedActorSystem
 {
   val system = ActorSystem("speed")
+
   val fileStateActor = system.actorOf(Props[FileStateManager], name = "fileStateActor")
 
   def getActorSystem () = system
