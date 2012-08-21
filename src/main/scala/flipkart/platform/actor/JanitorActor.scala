@@ -22,7 +22,7 @@ class JanitorActor (metaStore : RedisStore, dataStore : MembaseStore) extends Ac
   val maxAccessTime = 120000
   protected def receive = {
     case Read => processReadMsg()
-                 cleanInactiveFiles()
+                 cleanInactiveReadFiles()
     case Write => processWriteMsg
   }
 
@@ -52,7 +52,7 @@ class JanitorActor (metaStore : RedisStore, dataStore : MembaseStore) extends Ac
     }
   }
 
-  private def cleanInactiveFiles ()
+  private def cleanInactiveReadFiles ()
   {
     val fileReadCount = metaStore.getReadFileCountSet()
     val smallestFileCount = fileReadCount.head

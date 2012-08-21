@@ -2,16 +2,11 @@ package flipkart.platform.store
 
 import flipkart.platform.{Speed, LightningConfig}
 import flipkart.platform.file.{FileStatus, FileMetaData}
-import java.nio.ByteBuffer
-import flipkart.platform.randomGenerator.RandomGenerator
 import java.io.{IOException, InputStream}
-import akka.actor.{Props, Actor}
-import akka.pattern.ask
-import flipkart.platform.buffer.{SpeedBufStatus, SpeedBuf, UnBoundedFifoBuf}
+import akka.actor.Props
+import flipkart.platform.buffer.{SpeedBuf, UnBoundedFifoBuf}
 import akka.util.duration._
-import akka.routing.RoundRobinRouter
 import flipkart.platform.actor._
-import akka.util.Duration._
 import java.util.concurrent.TimeUnit
 import akka.util.{Duration, Timeout}
 

@@ -3,7 +3,6 @@ package flipkart.platform.store
 import flipkart.platform.file.{FileStatus, FileMetaData}
 import com.codahale.logula.Logging
 import collection.mutable.HashMap
-import akka.actor.ActorRef
 
 
 /**

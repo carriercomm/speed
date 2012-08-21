@@ -7,9 +7,7 @@ import akka.dispatch.Await
 import com.redis.RedisClientPool
 import flipkart.platform.file._
 import flipkart.platform.actor.{FileStateMsg, SpeedActorSystem}
-import akka.actor.{ActorRef, Props, Actor}
-import collection.immutable.TreeSet
-import collection.mutable.{LinkedList, HashMap}
+import collection.mutable.HashMap
 
 
 /**

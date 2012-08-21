@@ -1,6 +1,5 @@
 package flipkart.platform.file
 
-import akka.actor.ActorRef
 
 /**
  * Created by IntelliJ IDEA.

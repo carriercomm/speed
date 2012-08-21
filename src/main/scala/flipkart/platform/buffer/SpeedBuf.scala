@@ -11,6 +11,10 @@ import com.codahale.logula.Logging
  */
 
 trait SpeedBuf extends  Logging {
+
+  @volatile var bufReadable = SpeedBufStatus.UNKNOWN
+  @volatile var bufWriteComplete = SpeedBufStatus.UNKNOWN
+
   /**
    * returns a byte from the buffer
    */
@@ -31,9 +35,6 @@ trait SpeedBuf extends  Logging {
    */
   def write (items : Array[Byte])
 
-  def bufReadable () : SpeedBufStatus.Value
-
-  def bufWriteComplete () : SpeedBufStatus.Value
 }
 
 object SpeedBufStatus extends Enumeration

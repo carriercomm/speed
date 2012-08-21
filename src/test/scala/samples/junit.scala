@@ -8,12 +8,8 @@ import flipkart.platform.file.FileMetaData
 import flipkart.platform.cachefarm.Prometheus
 import flipkart.platform.cachefarm.config.Configuration
 import com.redis.RedisClient
-import java.nio.BufferUnderflowException
 import flipkart.platform.buffer.SpeedBufStatus
 import collection.mutable.ListBuffer
-import akka.actor.Actors
-import actors.Actor
-import rules.ExpectedException
 import java.io._
 
 @Test
@@ -100,7 +96,7 @@ class AppTest extends TestCase
     val fin = new FileInputStream(file);
     val data = inputStreamToByteArray(fin)
 
-    Thread.sleep(20000)
+    Thread.sleep(2000000)
     val buf = lightning.read("sample")
 
     val dataRead = ListBuffer[Byte]()
@@ -110,7 +106,7 @@ class AppTest extends TestCase
 
     while (byteCount > 0)
     {
-      if (buf.bufReadable() == SpeedBufStatus.YES)
+      if (buf.bufReadable == SpeedBufStatus.YES)
       {
         try
         {

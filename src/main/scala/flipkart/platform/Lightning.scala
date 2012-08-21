@@ -1,12 +1,8 @@
 package flipkart.platform
 
-import actor.{JanitorActor, SpeedActorSystem}
 import file.FileMetaData
 import store.StoreManager
 import java.io.InputStream
-import akka.util.Duration
-import java.util.concurrent.TimeUnit
-import akka.actor.Props
 
 /**
  * Created by IntelliJ IDEA.

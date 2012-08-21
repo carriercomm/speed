@@ -1,10 +1,6 @@
 package flipkart.platform.actor
 
-import akka.actor.ActorSystem._
-import akka.actor.Props._
 import akka.actor.{Props, ActorSystem}
-import akka.util.Duration
-import java.util.concurrent.TimeUnit
 
 /**
  * Created by IntelliJ IDEA.

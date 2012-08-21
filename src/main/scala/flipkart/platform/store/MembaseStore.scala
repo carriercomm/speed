@@ -14,7 +14,7 @@ import scala.collection.JavaConversions._
  */
 
 class MembaseStore(val hosts : Array[String], val bucket : String) extends DataStore{
-  val config: Configuration = new Configuration.ConfigBuilder(hosts, bucket, bucket, "").
+  val config: Configuration = new Configuration.ConfigBuilder(hosts(0), bucket, bucket, "").
           withConnPoolSize(10).withCompressTh(512).withOperationTimeOut(1, TimeUnit.SECONDS).build
 
   val dataStore = CacheFactory.newCache(config)
