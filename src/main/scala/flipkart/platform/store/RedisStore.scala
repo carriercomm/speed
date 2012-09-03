@@ -91,6 +91,8 @@ class RedisStore(val host: String, val port: Int) extends MetaStore
           pipelineClient =>
             pipelineClient.zadd(MetaStoreUtil.schemeFileMapVersionSet(fileName), version, version.toString)
             pipelineClient.hset(MetaStoreUtil.schemeFileNameVersion(fileName, version),
+                              FileMapFileNameVersionFields.Name.toString, fileName)
+            pipelineClient.hset(MetaStoreUtil.schemeFileNameVersion(fileName, version),
                               FileMapFileNameVersionFields.Version.toString, version)
 
         }
@@ -98,7 +100,7 @@ class RedisStore(val host: String, val port: Int) extends MetaStore
         updateFileChunkCount(fileName, version, 0)
 
         log.debug("Setting file metadata : " + attr.toString)
-        version
+        return version
     }
   }
 
@@ -240,15 +242,14 @@ class RedisStore(val host: String, val port: Int) extends MetaStore
     redisPool.withClient{
       redisHandler => {
         redisHandler.hgetall(MetaStoreUtil.schemeFileNameVersion(fileId)) foreach {
-          fileVersionMap => fileVersionMap foreach {
-            case (fileName, version) => if (getCurrentVersion(fileName) > version.toInt)
-            {
-              setFileStatus(fileName, version.toInt, FileStatus.InActive)
-              dataChunkList = listChunkForFileId(fileId)
-              redisHandler.srem(MetaStoreUtil.schemeFileMapVersionSet(fileName), version)
-              redisHandler.del(MetaStoreUtil.schemeFileNameVersion(fileId))
-              redisHandler.del(MetaStoreUtil.schemeFileChunk(fileId))
-            }
+          fileVersionMap => {
+            val fileName = fileVersionMap(FileMapFileNameVersionFields.Name.toString)
+            val version = fileVersionMap(FileMapFileNameVersionFields.Version.toString)
+            setFileStatus(fileName, version.toInt, FileStatus.InActive)
+            dataChunkList = listChunkForFileId(fileId)
+            redisHandler.srem(MetaStoreUtil.schemeFileMapVersionSet(fileName), version)
+            redisHandler.del(MetaStoreUtil.schemeFileNameVersion(fileId))
+            redisHandler.del(MetaStoreUtil.schemeFileChunk(fileId))
           }
         }
       }

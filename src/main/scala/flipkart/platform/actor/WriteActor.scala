@@ -3,12 +3,14 @@ package flipkart.platform.actor
 import com.codahale.logula.Logging
 import java.nio.ByteBuffer
 import flipkart.platform.store.{RedisStore, MembaseStore}
-import akka.actor.{Props, Actor}
 import akka.routing.RoundRobinRouter
 import flipkart.platform.randomGenerator.RandomGenerator
 import flipkart.platform.file.{FileStatus, FileMetaData}
 import flipkart.platform.LightningConfig
 import java.io.InputStream
+import akka.actor.{OneForOneStrategy, Props, Actor}
+import akka.actor.SupervisorStrategy._
+import akka.util.duration._
 
 /**
  * Created by IntelliJ IDEA.
@@ -26,6 +28,10 @@ case class WriteMasterMsg(fileName: String,
 class WriteMasterActor(val metaStore : RedisStore, val dataStore : MembaseStore,
                                                    val config : LightningConfig) extends Actor with Logging
 {
+  override val supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 10 seconds) {
+    case _ => Restart
+  }
+
   log.info("Created WriteMaster")
   val workerRouter = context.actorOf(Props[WriteWorkerActor].withRouter(RoundRobinRouter(100)))
 

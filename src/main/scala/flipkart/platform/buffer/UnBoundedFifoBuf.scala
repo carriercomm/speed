@@ -1,7 +1,6 @@
 package flipkart.platform.buffer
 
-import org.apache.commons.collections.buffer.UnboundedFifoBuffer
-
+import actors.threadpool.LinkedBlockingQueue
 
 /**
  * Created by IntelliJ IDEA.
@@ -12,16 +11,16 @@ import org.apache.commons.collections.buffer.UnboundedFifoBuffer
  */
 
 class UnBoundedFifoBuf extends SpeedBuf {
-  val buf = new UnboundedFifoBuffer()
+  val buf  = new LinkedBlockingQueue[Byte]()
 
   log.info("Created SpeedBuf " + buf.hashCode())
 
-  def read() = buf.remove().asInstanceOf[Byte]
+  def read() = buf.poll().asInstanceOf[Byte]
 
   def read(items: Int) : Array[Byte] = {
     val returnItems = new Array[Byte](items)
     for ( i <- 0 to items-1)
-      returnItems(i) = buf.remove().asInstanceOf[Byte]
+      returnItems(i) = read()
 
     return returnItems
   }

@@ -62,6 +62,7 @@ object FileMapFileNameFields extends Enumeration {
 }
 
 object FileMapFileNameVersionFields extends Enumeration {
+  val Name = Value("Name")
   val Version = Value("Version")
   val State = Value("State")
   val NumChunks = Value("NumChunks")
@@ -70,31 +71,31 @@ object FileMapFileNameVersionFields extends Enumeration {
 object MetaStoreUtil {
   def schemeFileDir () = "FileDir"
 
-  def schemeFileMap (fileName : String) = "FileMap"+fileName
+  def schemeFileMap (fileName : String) = "FileMap-"+fileName
 
-  def schemeFileMapVersionSet (fileName : String) = "FileMapVersionSet"+fileName
+  def schemeFileMapVersionSet (fileName : String) = "FileMapVersionSet-"+fileName
 
-  def schemeFileNameVersion (fileName : String,  version : Int) = "FileMap"+fileName+version
+  def schemeFileNameVersion (fileName : String,  version : Int) = "FileMap-"+fileName+"-"+version
 
-  def schemeFileNameVersion (fileId : String) = "FileMap"+fileId
+  def schemeFileNameVersion (fileId : String) = "FileMap-"+fileId
 
-  def schemeFileChunk(fileName :String, version : Int) = "FileChunk"+fileName+version
+  def schemeFileChunk(fileName :String, version : Int) = "FileChunk-"+fileName+"-"+version
 
-  def schemeFileChunk(fileId :String) = "FileChunk"+fileId
+  def schemeFileChunk(fileId :String) = "FileChunk-"+fileId
 
   def schemeActiveReadActorSet () = "ActiveReadActorSet"
 
   def schemeActiveWriteActorSet () = "ActiveWriteActorSet"
 
-  def schemeActiveReadActorMap (actorRef : String) = "ActiveReadActorMap" + actorRef
+  def schemeActiveReadActorMap (actorRef : String) = "ActiveReadActorMap-" + actorRef
 
-  def schemeActiveWriteActorMap (actorRef : String) = "ActiveWriteActorMap" + actorRef
+  def schemeActiveWriteActorMap (actorRef : String) = "ActiveWriteActorMap-" + actorRef
 
   def schemeActorReadFile () = "ActorReadFile"
 
   def schemeActorWriteFile () = "ActorWriteFile"
 
-  def schemeFileID (fileName:String,  version:Int) = fileName+version
+  def schemeFileID (fileName:String,  version:Int) = fileName+"-"+version
 
   def schemeFileReadCount () = "FileReadCount"
 

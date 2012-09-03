@@ -3,7 +3,6 @@ package samples
 import org.junit._
 import Assert._
 import junit.framework.TestCase
-import flipkart.platform.{Lightning, LightningConfig}
 import flipkart.platform.file.FileMetaData
 import flipkart.platform.cachefarm.Prometheus
 import flipkart.platform.cachefarm.config.Configuration
@@ -11,38 +10,40 @@ import com.redis.RedisClient
 import flipkart.platform.buffer.SpeedBufStatus
 import collection.mutable.ListBuffer
 import java.io._
+import flipkart.platform.{LightningConfig, Lightning}
 
 @Test
 class AppTest extends TestCase
 {
 
-  val host = "localhost"
-
-  val port = 6379
-
-  val bucket = "datastore"
-
-  val dataChunkSize = 7
-
-  val preFetchSize = 3
-
-  val logFile = "/tmp/SpeedTest.log"
-
   val dataFile = "/Users/vivekys/Temp/diag"
 
   val sampleFile = "/Users/vivekys/Temp/sample"
 
-  val lightningConfig = new LightningConfig(host, port, Array("pf-eng1"), 8091,
-    bucket, dataChunkSize, preFetchSize, 100, 100, logFile)
+  val lightningConfig = new LightningConfig(
+          metaStoreHost = "localhost",
+          metaStorePort = 6379,
+          dataStoreHost = Array("pf-eng1"),
+          dataStorePort = 8091,
+          dataStoreBucket = "datastore",
+          dataChunkSize = 409600,
+          preFetchSize = 4,
+          writerConcurrencyFactor = 4,
+          readerConcurrencyFactor = 5,
+          logFile = "/tmp/speed-lib.log"
+  )
 
   val lightning = new Lightning(lightningConfig)
 
+
   def resetAllData() =
   {
-    val redisClient = new RedisClient(host, port)
+    val redisClient = new RedisClient(lightningConfig.metaStoreHost, lightningConfig.metaStorePort)
     redisClient.flushall
 
-    val membaseClient = new Prometheus(new Configuration("pf-eng1", bucket, bucket, ""))
+    val membaseClient = new Prometheus(new Configuration(lightningConfig.dataStoreHost,
+        lightningConfig.dataStoreBucket, lightningConfig.dataStoreBucket, ""))
+
     membaseClient.flush()
   }
 
@@ -95,8 +96,7 @@ class AppTest extends TestCase
     val file = new File(sampleFile)
     val fin = new FileInputStream(file);
     val data = inputStreamToByteArray(fin)
-
-    Thread.sleep(2000000)
+    Thread.sleep(2000)
     val buf = lightning.read("sample")
 
     val dataRead = ListBuffer[Byte]()
@@ -122,7 +122,6 @@ class AppTest extends TestCase
     }
 
     val byteArray = dataRead.toArray
-
     assertArrayEquals(data, byteArray)
   }
 

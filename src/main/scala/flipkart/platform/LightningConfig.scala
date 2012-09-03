@@ -1,5 +1,6 @@
 package flipkart.platform
 
+
 /**
  * Created by IntelliJ IDEA.
  * User: vivekys
@@ -15,8 +16,8 @@ class LightningConfig(val metaStoreHost: String, //MetaStore host & in this case
                       val dataStoreBucket: String, //Membase bucket Name
                       val dataChunkSize: Int = 10*1024,
                       val preFetchSize: Int = 10,
-                      val writerConcurrencyFactor: Int = 100,
-                      val readerConcurrencyFactor: Int = 100,
+                      val writerConcurrencyFactor: Int = 5,
+                      val readerConcurrencyFactor: Int = 5,
                       val logFile: String)
 {
 
